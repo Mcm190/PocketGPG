@@ -55,8 +55,8 @@ $ gpg --list-packets secret.txt.gpg
 
 The app holds **no `INTERNET` permission**, so it cannot open a network connection at all.
 Android enforces that at the OS level. Share hands a file to whichever app you pick, and
-that app does the sending under its own permissions. Full policy: [`docs/index.html`](docs/index.html), published at
-<https://mcm190.github.io/PocketGPG/>
+that app does the sending under its own permissions. Full policy: <https://mcm190.github.io/pocketgpg-privacy/>, mirrored here in
+[`docs/index.html`](docs/index.html).
 
 ## Building
 

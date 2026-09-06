@@ -47,7 +47,7 @@ import com.pocketgpg.ui.theme.BrandBlue
 
 private const val COFFEE_URL = "https://buymeacoffee.com/1900xd"
 private const val SOURCE_URL = "https://github.com/Mcm190/PocketGPG"
-private const val PRIVACY_URL = "https://mcm190.github.io/PocketGPG/"
+private const val PRIVACY_URL = "https://mcm190.github.io/pocketgpg-privacy/"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
