@@ -7,6 +7,17 @@ Encrypt and decrypt files with a passphrase on Android, producing ordinary OpenP
   <img src="applogo.png" width="160" alt="PocketGPG">
 </p>
 
+## Screenshots
+
+Select files, generate a passphrase, and choose your encryption settings.
+Click a screenshot to view it full size.
+
+<p align="center">
+  <a href="screenshots/play-01-encrypt.png"><img src="screenshots/play-01-encrypt.png" width="240" alt="Encrypt screen with multiple files selected and a ZIP option"></a>
+  <a href="screenshots/play-02-passphrase.png"><img src="screenshots/play-02-passphrase.png" width="240" alt="Generated passphrase with a strength indicator"></a>
+  <a href="screenshots/play-04-ciphers.png"><img src="screenshots/play-04-ciphers.png" width="240" alt="Cipher selection menu with AES, Camellia and other options"></a>
+</p>
+
 ## What it does
 
 - **Encrypt any files** with a passphrase you choose or generate. Output is a standard
