@@ -83,4 +83,10 @@ that a given distribution has compiled out.
 
 ## Licence
 
-Not yet chosen.
+MIT, see [LICENSE](LICENSE).
+
+PocketGPG bundles Bouncy Castle (Bouncy Castle Licence, MIT-style) and AndroidX, Jetpack
+Compose and the Kotlin libraries (Apache-2.0). Both are permissive and neither is copyleft.
+Full attribution is in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) and in the app's
+About screen. GnuPG is not bundled; it is only referenced because the app writes the same
+format, and because the test suite shells out to it to prove interoperability.

@@ -129,6 +129,16 @@ fun AboutSheet(onDismiss: () -> Unit) {
                     "so it cannot transmit anything on its own.",
             )
 
+            AboutParagraph(
+                "Open source licences",
+                "Encryption is provided by Bouncy Castle, copyright 2000-2024 The Legion of the " +
+                    "Bouncy Castle Inc., used under the Bouncy Castle Licence (an MIT-style licence). " +
+                    "The interface is built with AndroidX and Jetpack Compose, copyright The Android " +
+                    "Open Source Project, and the Kotlin standard library and coroutines, copyright " +
+                    "JetBrains s.r.o. and Kotlin contributors, all used under the Apache License 2.0. " +
+                    "Full notices are in THIRD-PARTY-NOTICES.md in the source repository.",
+            )
+
             HorizontalDivider()
 
             Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {

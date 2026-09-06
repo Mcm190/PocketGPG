@@ -7,15 +7,19 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -149,9 +153,16 @@ fun PocketGpgScreen(viewModel: MainViewModel) {
         bottomBar = { ActionBar(viewModel) },
         snackbarHost = { SnackbarHost(snackbars) },
     ) { padding ->
-        Column(
+        Box(
             modifier = Modifier
                 .padding(padding)
+                .fillMaxSize(),
+            contentAlignment = Alignment.TopCenter,
+        ) {
+        // Cards stretched edge to edge on tablets; cap the reading width and centre it.
+        Column(
+            modifier = Modifier
+                .widthIn(max = CONTENT_WIDTH)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp)
                 .padding(bottom = 16.dp),
@@ -234,8 +245,12 @@ fun PocketGpgScreen(viewModel: MainViewModel) {
                 }
             }
         }
+        }
     }
 }
+
+/** Keeps the layout readable on tablets rather than stretching cards across the screen. */
+private val CONTENT_WIDTH = 640.dp
 
 @Composable
 private fun ModeSelector(mode: Mode, running: Boolean, onSelect: (Mode) -> Unit) {
@@ -526,6 +541,8 @@ private fun ActionBar(viewModel: MainViewModel) {
             modifier = Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
+                .wrapContentWidth()
+                .widthIn(max = CONTENT_WIDTH)
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
