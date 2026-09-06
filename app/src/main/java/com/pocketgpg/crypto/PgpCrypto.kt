@@ -45,7 +45,7 @@ object PgpCrypto {
             PgpError("This does not look like an OpenPGP encrypted file.")
 
         class IntegrityFailure :
-            PgpError("The file decrypted but failed its integrity check — it may be corrupt or tampered with.")
+            PgpError("The file decrypted but failed its integrity check. It may be corrupt or tampered with.")
     }
 
     data class DecryptResult(
@@ -81,7 +81,7 @@ object PgpCrypto {
 
     /**
      * Opens an OpenPGP message and hands [writePlaintext] the stream that becomes its contents,
-     * so callers can generate plaintext on the fly — a zip bundle, say — without ever staging it
+     * so callers can generate plaintext on the fly (a zip bundle, say) without ever staging it
      * on disk. The stream is closed for you; do not close it inside the block.
      */
     fun encryptTo(
@@ -183,7 +183,7 @@ object PgpCrypto {
     }
 
     enum class Recognition {
-        /** Not an OpenPGP encrypted message — safe to encrypt, impossible to decrypt. */
+        /** Not an OpenPGP encrypted message: safe to encrypt, impossible to decrypt. */
         NotOpenPgp,
         PassphraseEncrypted,
         KeyEncrypted,

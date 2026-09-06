@@ -143,7 +143,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     message = when {
                         rejected.isEmpty() -> null
                         rejected.size == 1 -> rejected.first()
-                        else -> "Skipped ${rejected.size} files — ${rejected.first()}"
+                        else -> "Skipped ${rejected.size} files: ${rejected.first()}"
                     },
                 )
             }
@@ -153,7 +153,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * Sniffs each pick so an already-encrypted file cannot be encrypted a second time, and a file
      * that is not an OpenPGP message cannot be queued for decryption. The extension is not
-     * trusted — only the packet header is.
+     * trusted; only the packet header is.
      */
     private fun screen(uris: List<Uri>, mode: Mode): Pair<List<PickedFile>, List<String>> {
         val context = getApplication<Application>()

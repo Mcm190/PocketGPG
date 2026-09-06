@@ -119,7 +119,7 @@ fun PocketGpgScreen(viewModel: MainViewModel) {
                 Text(
                     "You picked ${state.files.size} files. PocketGPG can zip them together and encrypt " +
                         "the archive as a single file, or encrypt each file on its own.\n\n" +
-                        "Decrypting an archive gives back the .zip — you open that yourself.",
+                        "Decrypting an archive gives back the .zip, which you open yourself.",
                 )
             },
             confirmButton = {
@@ -209,8 +209,8 @@ fun PocketGpgScreen(viewModel: MainViewModel) {
                 )
                 if (state.destination == null) {
                     Text(
-                        "Android will not hand out the whole Download folder, so pick a subfolder — " +
-                            "tap Create new folder in the picker and call it PocketGPG. " +
+                        "Android will not hand out the whole Download folder, so pick a subfolder. " +
+                            "Tap Create new folder in the picker and call it PocketGPG. " +
                             "It is remembered after that.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -427,7 +427,7 @@ private fun ShredCard(viewModel: MainViewModel) {
     SectionCard("Shred after finishing", Icons.Default.DeleteForever) {
         SwitchRow(
             title = "Shred the $originals",
-            subtitle = "Overwrite the contents, then delete — not just a plain delete",
+            subtitle = "Overwrite the contents, then delete, not just a plain delete",
             checked = state.shredSource,
             enabled = !state.running,
             onCheckedChange = viewModel::setShredSource,
@@ -460,7 +460,7 @@ private fun ShredCard(viewModel: MainViewModel) {
                     Spacer(Modifier.width(8.dp))
                     Text(
                         "On flash storage, wear levelling can leave the old cells readable. This makes " +
-                            "casual recovery hard; it is not a guarantee. More passes cost time, not certainty.",
+                            "casual recovery hard; it is not a guarantee.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

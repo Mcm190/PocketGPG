@@ -98,10 +98,10 @@ fun AboutSheet(onDismiss: () -> Unit) {
 
             AboutParagraph(
                 "Symmetric OpenPGP",
-                "Files are encrypted with your passphrase alone — no keys, no keyring, the same thing "
+                "Files are encrypted with your passphrase alone: no keys, no keyring, the same thing "
                     + "`gpg --symmetric` does. Whoever you send a file to needs that passphrase to open it. " +
-                    "Anyone can open them with `gpg -d` on a desktop, or with any OpenPGP tool — " +
-                    "nothing here is a proprietary format. Encryption is done by Bouncy Castle's OpenPGP " +
+                    "Anyone can open them with `gpg -d` on a desktop, or with any OpenPGP tool. " +
+                    "Nothing here is a proprietary format. Encryption is done by Bouncy Castle's OpenPGP " +
                     "implementation, the same library behind OpenKeychain.",
             )
 
@@ -124,7 +124,7 @@ fun AboutSheet(onDismiss: () -> Unit) {
                 "Getting files off the phone",
                 "Encrypted files land in the folder you pick, so plugging into a computer over USB " +
                     "(or opening that folder in any file manager) is enough to send them on. " +
-                    "Share hands the file to whichever app you choose — WhatsApp, email, Bluetooth — " +
+                    "Share hands the file to whichever app you choose (WhatsApp, email, Bluetooth) " +
                     "and that app does the sending. PocketGPG holds no internet permission at all, " +
                     "so it cannot transmit anything on its own.",
             )
