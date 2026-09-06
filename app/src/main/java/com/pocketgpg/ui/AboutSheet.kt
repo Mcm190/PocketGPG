@@ -47,7 +47,7 @@ import com.pocketgpg.ui.theme.BrandBlue
 
 private const val COFFEE_URL = "https://buymeacoffee.com/1900xd"
 private const val SOURCE_URL = "https://github.com/Mcm190/PocketGPG"
-private const val PRIVACY_URL = "https://mcm190.github.io/pocketgpg-privacy/"
+private const val PRIVACY_URL = "https://mcm190.github.io/PocketGPG/"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -97,8 +97,9 @@ fun AboutSheet(onDismiss: () -> Unit) {
             }
 
             AboutParagraph(
-                "Standard OpenPGP",
-                "Files are encrypted with your passphrase into ordinary OpenPGP messages. " +
+                "Symmetric OpenPGP",
+                "Files are encrypted with your passphrase alone — no keys, no keyring, the same thing "
+                    + "`gpg --symmetric` does. Whoever you send a file to needs that passphrase to open it. " +
                     "Anyone can open them with `gpg -d` on a desktop, or with any OpenPGP tool — " +
                     "nothing here is a proprietary format. Encryption is done by Bouncy Castle's OpenPGP " +
                     "implementation, the same library behind OpenKeychain.",

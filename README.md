@@ -18,10 +18,16 @@ Encrypt and decrypt files with a passphrase on Android, producing ordinary OpenP
 - **Decrypt** anything produced by PocketGPG or by `gpg --symmetric`.
 - **Pick the cipher**: AES-256 (default), AES-192, AES-128, Camellia, Twofish, and the
   legacy Blowfish/3DES for compatibility. Compression is ZLIB, ZIP, BZip2 or none.
-- **Shred the originals** after a successful run — overwrite, rename, then delete, rather
-  than a plain delete. The app is explicit about the limits of this on flash storage.
+- **Shred the originals** after a successful run — overwrite the contents before deleting,
+  rather than a plain delete. The app is explicit about the limits of this on flash storage.
 - Results land in a folder you pick, so they're reachable over USB or from any file
   manager, and there's a Share button for handing one to another app.
+
+## Symmetric, not key-based
+
+PocketGPG does what `gpg --symmetric` does: one passphrase locks the file and the same
+passphrase unlocks it. There are no public/private keys and no keyring to manage — whoever
+you send the file to just needs the passphrase, and how you get it to them is up to you.
 
 ## Is this "real" GPG?
 
@@ -49,8 +55,8 @@ $ gpg --list-packets secret.txt.gpg
 
 The app holds **no `INTERNET` permission**, so it cannot open a network connection at all —
 Android enforces that at the OS level. Share hands a file to whichever app you pick, and
-that app does the sending under its own permissions. Full policy:
-<https://mcm190.github.io/pocketgpg-privacy/>
+that app does the sending under its own permissions. Full policy: [`docs/index.html`](docs/index.html), published at
+<https://mcm190.github.io/PocketGPG/>
 
 ## Building
 

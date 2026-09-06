@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PocketGPG - Privacy Policy</title>
+<style>
+  body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; max-width: 700px; margin: 40px auto; padding: 0 20px; line-height: 1.6; color: #1a1a1a; }
+  h1 { font-size: 1.6em; }
+  h2 { font-size: 1.2em; margin-top: 1.8em; }
+  code { background: #f0f0f0; padding: 0.1em 0.4em; border-radius: 3px; }
+</style>
+</head>
+<body>
+<h1>Privacy Policy for PocketGPG</h1>
+<p><em>Last updated: 6 September 2026</em></p>
+
+<p>PocketGPG is developed by an independent developer. This policy
+explains what data the app uses and what happens to it.</p>
+
+<p>The short version: PocketGPG encrypts files with a passphrase using
+symmetric OpenPGP encryption, entirely on your device. It has no internet
+permission at all, so it cannot send anything anywhere even if it wanted
+to.</p>
+
+<h2>Your files</h2>
+<p>You choose which files the app can see, one at a time, through
+Android's own document picker. The app never browses your storage on its
+own and never receives blanket access to it. Files are read, encrypted or
+decrypted, and written back to the folder you chose - all on the device.
+Nothing is uploaded, copied elsewhere, or retained by the app after the
+job finishes.</p>
+
+<h2>Your passphrase</h2>
+<p>Your passphrase is used on the device to derive the encryption key, and
+is held in memory only for as long as the operation takes. It is never
+written to disk, never stored in the app's settings, and never
+transmitted. There is no recovery mechanism and no back door - if you
+forget the passphrase, neither I nor anyone else can open your files.</p>
+
+<h2>Sharing files with other apps</h2>
+<p>The app has a Share button, and it is worth being clear about what that
+does. PocketGPG does not send anything itself - it hands the chosen file
+to Android, which shows you the share sheet and grants the app you pick
+(WhatsApp, Gmail, Bluetooth, Nearby Share, your file manager) temporary
+read access to that one file. That app then sends it, using its own
+network permission and under its own privacy policy.</p>
+<p>The same applies to the links in the About screen: they ask Android to
+open a web address in your browser, rather than fetching anything
+themselves.</p>
+<p>Because PocketGPG holds no <code>INTERNET</code> permission, it cannot
+open a network connection even in principle - Android enforces this at
+the operating-system level. Anything that leaves your phone leaves
+because you handed it to another app deliberately.</p>
+
+<h2>Encryption</h2>
+<p>PocketGPG uses <strong>symmetric encryption</strong> - the kind GnuPG
+performs with <code>gpg --symmetric</code>. There are no public or private
+keys and no keyring: one passphrase both locks and unlocks the file, and
+whoever you send the file to needs that same passphrase to open it. How you
+pass the passphrase on is up to you, and the app plays no part in it.</p>
+<p>The passphrase is turned into an encryption key on your device using
+OpenPGP's salted, iterated string-to-key function (SHA-256, at the highest
+iteration count the format allows), and the file is then encrypted with the
+cipher you pick - AES-256 by default. Every file also carries an integrity
+check, so tampering is detected when it is decrypted.</p>
+<p>The work is done by the <a href="https://www.bouncycastle.org">Bouncy
+Castle</a> OpenPGP implementation bundled inside the app. The resulting
+<code>.gpg</code> files are ordinary OpenPGP messages and can be opened with
+<code>gpg -d</code> or any other OpenPGP tool. No key, passphrase or file
+ever leaves your device as part of this.</p>
+
+<h2>Shredding</h2>
+<p>If you turn on shredding, the app overwrites the original file's bytes
+before deleting it. You should know the limit of this: on
+the flash storage phones use, the controller's wear levelling may write
+those passes to fresh memory cells and leave the original cells intact
+until they are eventually reused. Shredding makes casual recovery hard.
+It is not a guarantee against forensic recovery, and the app says so
+in-app too.</p>
+
+<h2>What this app does not do</h2>
+<ul>
+  <li>No internet permission - the app has no network access whatsoever.</li>
+  <li>No account creation or sign-in.</li>
+  <li>No advertising SDKs.</li>
+  <li>No analytics or crash-reporting SDKs.</li>
+  <li>No data is sold or shared with any third party, because none is
+      collected in the first place.</li>
+  <li>No payment processing - the app is free.</li>
+</ul>
+
+<h2>Children</h2>
+<p>This app is not directed at children and is not designed to collect
+information from them.</p>
+
+<h2>Changes to this policy</h2>
+<p>If this policy changes, an updated version will be published at this
+same address with a revised date above.</p>
+
+<h2>Contact</h2>
+<p>For questions about this policy, contact:
+<a href="mailto:maxcartermarshall@gmail.com">maxcartermarshall@gmail.com</a></p>
+
+</body>
+</html>
