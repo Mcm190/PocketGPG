@@ -82,6 +82,25 @@ class PgpCryptoTest {
     }
 
     @Test
+    fun `a message with no integrity protection is refused, as gnupg refuses it`() {
+        assumeTrue(gpgAvailable())
+        val source = temp.newFile("nomdc.bin").apply { writeBytes(plaintext(1_000)) }
+        val encrypted = File(temp.root, "nomdc.gpg")
+        // --rfc2440 drops the modification detection code, leaving the ciphertext malleable.
+        val made = gpg("--rfc2440", "--cipher-algo", "3DES", "--symmetric", "--output", encrypted.path, source.path)
+        assumeTrue(made.first == 0)
+
+        assertEquals(PgpCrypto.Recognition.NotIntegrityProtected, PgpCrypto.inspect(encrypted.inputStream()))
+
+        val out = ByteArrayOutputStream()
+        val error = runCatching {
+            PgpCrypto.decrypt(encrypted.inputStream(), out, passphrase)
+        }.exceptionOrNull()
+        assertTrue("was $error", error is PgpCrypto.PgpError.NoIntegrityProtection)
+        assertEquals("no plaintext may be released", 0, out.size())
+    }
+
+    @Test
     fun `non-pgp input is rejected`() {
         val error = runCatching {
             PgpCrypto.decrypt(ByteArrayInputStream("hello world".toByteArray()), ByteArrayOutputStream(), passphrase)

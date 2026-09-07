@@ -12,6 +12,7 @@ import com.pocketgpg.crypto.PgpCrypto
 import com.pocketgpg.crypto.Shredder
 import com.pocketgpg.data.Documents
 import com.pocketgpg.data.PickedFile
+import java.io.File
 import java.io.OutputStream
 import java.security.SecureRandom
 import java.text.SimpleDateFormat
@@ -99,6 +100,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private var job: Job? = null
 
+    init {
+        // Plaintext staged by a decrypt that died with the process must not outlive it.
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { stagingDir().listFiles()?.forEach(Shredder::wipeLocal) }
+        }
+    }
+
+    /** Private scratch space for plaintext that has not been authenticated yet. */
+    private fun stagingDir(): File =
+        File(getApplication<Application>().noBackupFilesDir, "staging").apply { mkdirs() }
+
     private fun restoreState(): UiState {
         val saved = prefs.getString(KEY_DESTINATION, null)?.let(Uri::parse)
         val stillGranted = saved != null && getApplication<Application>().contentResolver
@@ -173,6 +185,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     rejected += "${file.name} is not an encrypted OpenPGP file"
                 mode == Mode.Decrypt && recognition == PgpCrypto.Recognition.KeyEncrypted ->
                     rejected += "${file.name} needs a private key, not a passphrase"
+                mode == Mode.Decrypt && recognition == PgpCrypto.Recognition.NotIntegrityProtected ->
+                    rejected += "${file.name} has no integrity protection, so its contents cannot be trusted"
                 else -> accepted += file
             }
         }
@@ -318,11 +332,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 report(index, snapshot.files.size, file.name, verb, 0f)
 
                 var created: Uri? = null
+                var staging: File? = null
                 try {
-                    val output = Documents.createOutput(context, destination, outputName)
-                        ?: throw IllegalStateException("could not create $outputName in the chosen folder")
-                    created = output
-
                     val onProgress: (Long) -> Unit = { processed ->
                         work.ensureActive()
                         report(
@@ -332,13 +343,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
 
                     var embeddedName: String? = null
-                    val source = resolver.openInputStream(file.uri)
-                        ?: throw IllegalStateException("could not read ${file.name}")
-                    source.use { input ->
-                        val sink = resolver.openOutputStream(output, "wt")
-                            ?: throw IllegalStateException("could not write $outputName")
-                        sink.use { target ->
-                            if (encrypting) {
+                    val output: Uri
+
+                    if (encrypting) {
+                        output = Documents.createOutput(context, destination, outputName)
+                            ?: throw IllegalStateException("could not create $outputName in the chosen folder")
+                        created = output
+                        val source = resolver.openInputStream(file.uri)
+                            ?: throw IllegalStateException("could not read ${file.name}")
+                        source.use { input ->
+                            val sink = resolver.openOutputStream(output, "wt")
+                                ?: throw IllegalStateException("could not write $outputName")
+                            sink.use { target ->
                                 PgpCrypto.encrypt(
                                     source = input,
                                     destination = target,
@@ -349,9 +365,58 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                                     fileName = file.name,
                                     onProgress = onProgress,
                                 )
-                            } else {
+                            }
+                        }
+                    } else {
+                        // Plaintext is not authenticated until the last byte has been read, so it
+                        // goes somewhere private first. Writing it to the chosen folder and
+                        // deleting it again on failure would already have published whatever an
+                        // attacker put in the file.
+                        //
+                        // A floor, not a prediction: compression means the plaintext can be far
+                        // larger than this, but there is no point starting without room for it.
+                        if (file.size > 0 && stagingDir().usableSpace < file.size) {
+                            throw IllegalStateException("not enough free space on this device to decrypt ${file.name}")
+                        }
+                        val stage = File(stagingDir(), "decrypt-${System.nanoTime()}")
+                        staging = stage
+                        val source = resolver.openInputStream(file.uri)
+                            ?: throw IllegalStateException("could not read ${file.name}")
+                        source.use { input ->
+                            stage.outputStream().use { target ->
                                 embeddedName =
                                     PgpCrypto.decrypt(input, target, passphrase, onProgress).embeddedFileName
+                            }
+                        }
+
+                        // Authenticated. Only now may it leave the sandbox.
+                        output = Documents.createOutput(context, destination, outputName)
+                            ?: throw IllegalStateException("could not create $outputName in the chosen folder")
+                        created = output
+                        val staged = stage.length()
+                        stage.inputStream().use { input ->
+                            val sink = resolver.openOutputStream(output, "wt")
+                                ?: throw IllegalStateException("could not write $outputName")
+                            sink.use { target ->
+                                val buffer = ByteArray(1 shl 16)
+                                var copied = 0L
+                                var reported = 0L
+                                while (true) {
+                                    work.ensureActive()
+                                    val read = input.read(buffer)
+                                    if (read < 0) break
+                                    target.write(buffer, 0, read)
+                                    copied += read
+                                    // Same 1 MB step the crypto uses: a report per 64 KB would
+                                    // recompose thousands of times on a large file.
+                                    if (copied - reported >= (1L shl 20)) {
+                                        reported = copied
+                                        report(
+                                            index, snapshot.files.size, file.name, "Saving",
+                                            if (staged > 0) (copied.toFloat() / staged).coerceIn(0f, 1f) else null,
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -388,6 +453,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 } catch (e: Exception) {
                     created?.let { partial -> runCatching { DocumentsContract.deleteDocument(resolver, partial) } }
                     results += FileOutcome(file.name, error = e.message ?: e.javaClass.simpleName)
+                } finally {
+                    staging?.let(Shredder::wipeLocal)
                 }
             }
         } finally {

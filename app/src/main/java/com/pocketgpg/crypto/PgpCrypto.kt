@@ -46,6 +46,9 @@ object PgpCrypto {
 
         class IntegrityFailure :
             PgpError("The file decrypted but failed its integrity check. It may be corrupt or tampered with.")
+
+        class NoIntegrityProtection :
+            PgpError("This file carries no integrity protection, so its contents cannot be trusted. GnuPG refuses these too.")
     }
 
     data class DecryptResult(
@@ -133,6 +136,11 @@ object PgpCrypto {
     /**
      * Reads an OpenPGP message produced by `gpg -c` (armored or binary) and writes the plaintext
      * to [destination]. Throws [PgpError.WrongPassphrase] for a bad passphrase.
+     *
+     * Note that [destination] receives plaintext that has not been authenticated yet: the
+     * integrity check can only finish once the last byte has been read. Callers who hand the
+     * result on to somewhere durable must write somewhere private and copy across only after
+     * this returns, which is what [PgpError.IntegrityFailure] is there to prevent.
      */
     fun decrypt(
         source: InputStream,
@@ -150,6 +158,11 @@ object PgpCrypto {
             .map { encryptedList.get(it) }
             .filterIsInstance<PGPPBEEncryptedData>()
             .firstOrNull() ?: throw PgpError.NotPasswordEncrypted()
+
+        // Checked before any plaintext exists. Without a modification detection code the
+        // ciphertext is malleable, so what came out would be whatever an attacker chose rather
+        // than what was encrypted. `gpg` fails the same file outright; so do we.
+        if (!passphraseEncrypted.isIntegrityProtected) throw PgpError.NoIntegrityProtection()
 
         val decryptorFactory = BcPBEDataDecryptorFactory(passphrase, BcPGPDigestCalculatorProvider())
         val clearStream = try {
@@ -171,14 +184,13 @@ object PgpCrypto {
             throw PgpError.WrongPassphrase(e)
         }
 
-        val integrityProtected = passphraseEncrypted.isIntegrityProtected
-        if (integrityProtected && !passphraseEncrypted.verify()) throw PgpError.IntegrityFailure()
+        if (!passphraseEncrypted.verify()) throw PgpError.IntegrityFailure()
 
         return DecryptResult(
             embeddedFileName = literal.fileName.takeIf { it.isNotEmpty() && it != PGPLiteralData.CONSOLE },
             modifiedAt = literal.modificationTime,
             bytesWritten = written,
-            integrityProtected = integrityProtected,
+            integrityProtected = true,
         )
     }
 
@@ -187,6 +199,8 @@ object PgpCrypto {
         NotOpenPgp,
         PassphraseEncrypted,
         KeyEncrypted,
+        /** Passphrase-encrypted, but with no modification detection code to check it against. */
+        NotIntegrityProtected,
     }
 
     /** Reads only the first packet of [source] to work out what kind of file it is. */
@@ -196,10 +210,16 @@ object PgpCrypto {
         if (first is PGPMarker) first = factory.nextObject()
         when (val list = first as? PGPEncryptedDataList) {
             null -> Recognition.NotOpenPgp
-            else -> if ((0 until list.size()).any { list.get(it) is PGPPBEEncryptedData }) {
-                Recognition.PassphraseEncrypted
-            } else {
-                Recognition.KeyEncrypted
+            else -> {
+                val pbe = (0 until list.size())
+                    .map { list.get(it) }
+                    .filterIsInstance<PGPPBEEncryptedData>()
+                    .firstOrNull()
+                when {
+                    pbe == null -> Recognition.KeyEncrypted
+                    !pbe.isIntegrityProtected -> Recognition.NotIntegrityProtected
+                    else -> Recognition.PassphraseEncrypted
+                }
             }
         }
     } catch (_: Exception) {

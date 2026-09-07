@@ -3,8 +3,12 @@ package com.pocketgpg.crypto
 import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
+import android.system.Os
+import android.system.OsConstants
 import androidx.documentfile.provider.DocumentFile
+import java.io.File
 import java.io.FileOutputStream
+import java.io.RandomAccessFile
 import java.security.SecureRandom
 
 /**
@@ -35,13 +39,22 @@ object Shredder {
             ?: return Outcome.Failed("no longer reachable")
         if (!document.canWrite()) return Outcome.Failed("no write permission for this location")
 
-        val length = document.length()
         val random = SecureRandom()
 
         try {
             val descriptor = resolver.openFileDescriptor(uri, "rw")
                 ?: return Outcome.Failed("could not open for writing")
             descriptor.use {
+                // Deliberately not DocumentFile.length(). That reads the provider's SIZE column,
+                // which the SAF contract makes optional, and reports 0 when it is missing --
+                // which would walk the whole overwrite loop zero times and still report success.
+                // fstat on the descriptor we are about to write through cannot disagree with it.
+                val stat = Os.fstat(descriptor.fileDescriptor)
+                if (!OsConstants.S_ISREG(stat.st_mode)) {
+                    return Outcome.Failed("this location streams its contents, so there is nothing here to overwrite")
+                }
+                val length = stat.st_size
+
                 FileOutputStream(descriptor.fileDescriptor).use { output ->
                     val buffer = ByteArray(CHUNK)
                     val totalWork = (passes * length).coerceAtLeast(1)
@@ -76,5 +89,29 @@ object Shredder {
             .getOrElse { document.delete() }
 
         return if (deleted) Outcome.Shredded else Outcome.Failed("overwritten, but the file could not be deleted")
+    }
+
+    /**
+     * Overwrites and removes a file in the app's own storage. Used for the staging file that
+     * decryption writes plaintext into, which is a real file on the same flash and so deserves
+     * the same treatment as an original the user asked us to shred.
+     */
+    fun wipeLocal(file: File) {
+        runCatching {
+            if (file.isFile) {
+                RandomAccessFile(file, "rw").use { raf ->
+                    val zeros = ByteArray(CHUNK)
+                    var remaining = raf.length()
+                    while (remaining > 0) {
+                        val take = minOf(remaining, zeros.size.toLong()).toInt()
+                        raf.write(zeros, 0, take)
+                        remaining -= take
+                    }
+                    raf.fd.sync()
+                    raf.setLength(0)
+                }
+            }
+        }
+        runCatching { file.delete() }
     }
 }
