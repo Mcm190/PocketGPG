@@ -439,47 +439,42 @@ private fun ShredCard(viewModel: MainViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val originals = if (state.mode == Mode.Encrypt) "original files" else "encrypted files"
 
+    val note = if (state.mode == Mode.Encrypt) {
+        "Flash storage can leave the old copy readable elsewhere on the chip until the controller " +
+            "erases it, so treat this as raising the bar against casual recovery, not a guarantee " +
+            "against a forensic lab."
+    } else {
+        "The decrypted file is held under a one-time key that's destroyed the moment it's no " +
+            "longer needed, so no readable copy of it is left behind. Overwriting the " +
+            "$originals is still best-effort: flash storage can leave old copies readable until " +
+            "the controller erases them."
+    }
+
     SectionCard("Shred after finishing", Icons.Default.DeleteForever) {
         SwitchRow(
-            title = "Shred the $originals",
-            subtitle = "Overwrite the contents, then delete, not just a plain delete",
+            title = "Secure delete",
+            subtitle = "Overwrite the $originals before deleting them, not just a plain delete",
             checked = state.shredSource,
             enabled = !state.running,
             onCheckedChange = viewModel::setShredSource,
         )
         AnimatedVisibility(state.shredSource) {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Overwrite passes", style = MaterialTheme.typography.bodyMedium)
-                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                    listOf(1, 3, 7).forEachIndexed { index, passes ->
-                        SegmentedButton(
-                            selected = state.shredPasses == passes,
-                            onClick = { viewModel.setShredPasses(passes) },
-                            enabled = !state.running,
-                            shape = SegmentedButtonDefaults.itemShape(index, 3),
-                        ) {
-                            Text("$passes")
-                        }
-                    }
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.Top,
-                ) {
-                    Icon(
-                        Icons.Default.Warning,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        "On flash storage, wear levelling can leave the old cells readable. This makes " +
-                            "casual recovery hard; it is not a guarantee.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top,
+            ) {
+                Icon(
+                    Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    note,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }

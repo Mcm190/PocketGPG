@@ -9,7 +9,6 @@ import androidx.documentfile.provider.DocumentFile
 import java.io.File
 import java.io.FileOutputStream
 import java.io.RandomAccessFile
-import java.security.SecureRandom
 
 /**
  * Overwrites a document's bytes in place before deleting it, so the contents are not left
@@ -17,7 +16,10 @@ import java.security.SecureRandom
  *
  * On flash storage this is best-effort by nature: the controller's wear levelling may map a
  * write to a fresh physical page and leave the original one intact until it is garbage
- * collected. The UI says so rather than promising more than this can deliver.
+ * collected -- and once that's true, overwriting more than once buys nothing further, since each
+ * extra pass is just as likely to land on yet another fresh page rather than the one that
+ * matters. One pass is written; the UI says this is best-effort rather than promising more than
+ * it can deliver.
  */
 object Shredder {
 
@@ -31,15 +33,12 @@ object Shredder {
     fun shred(
         context: Context,
         uri: Uri,
-        passes: Int,
         onProgress: (Float) -> Unit = {},
     ): Outcome {
         val resolver = context.contentResolver
         val document = DocumentFile.fromSingleUri(context, uri)
             ?: return Outcome.Failed("no longer reachable")
         if (!document.canWrite()) return Outcome.Failed("no write permission for this location")
-
-        val random = SecureRandom()
 
         try {
             val descriptor = resolver.openFileDescriptor(uri, "rw")
@@ -57,24 +56,18 @@ object Shredder {
 
                 FileOutputStream(descriptor.fileDescriptor).use { output ->
                     val buffer = ByteArray(CHUNK)
-                    val totalWork = (passes * length).coerceAtLeast(1)
+                    val totalWork = length.coerceAtLeast(1)
                     var done = 0L
-                    for (pass in 0 until passes) {
-                        val zeroPass = pass == passes - 1
-                        if (zeroPass) buffer.fill(0)
-                        output.channel.position(0)
-                        var remaining = length
-                        while (remaining > 0) {
-                            if (!zeroPass) random.nextBytes(buffer)
-                            val take = minOf(remaining, buffer.size.toLong()).toInt()
-                            output.write(buffer, 0, take)
-                            remaining -= take
-                            done += take
-                            onProgress(done.toFloat() / totalWork)
-                        }
-                        output.flush()
-                        descriptor.fileDescriptor.sync()
+                    var remaining = length
+                    while (remaining > 0) {
+                        val take = minOf(remaining, buffer.size.toLong()).toInt()
+                        output.write(buffer, 0, take)
+                        remaining -= take
+                        done += take
+                        onProgress(done.toFloat() / totalWork)
                     }
+                    output.flush()
+                    descriptor.fileDescriptor.sync()
                     output.channel.truncate(0)
                     descriptor.fileDescriptor.sync()
                 }
@@ -92,9 +85,10 @@ object Shredder {
     }
 
     /**
-     * Overwrites and removes a file in the app's own storage. Used for the staging file that
-     * decryption writes plaintext into, which is a real file on the same flash and so deserves
-     * the same treatment as an original the user asked us to shred.
+     * Overwrites and removes a file in the app's own storage. Used for decryption's staging
+     * file, which by the time this runs holds only ciphertext under a [StagingCipher] key that
+     * has already been (or is about to be) destroyed -- so this overwrite is defence in depth
+     * rather than the only thing standing between that file and recovery.
      */
     fun wipeLocal(file: File) {
         runCatching {

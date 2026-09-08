@@ -10,6 +10,7 @@ import com.pocketgpg.crypto.PgpCipher
 import com.pocketgpg.crypto.PgpCompression
 import com.pocketgpg.crypto.PgpCrypto
 import com.pocketgpg.crypto.Shredder
+import com.pocketgpg.crypto.StagingCipher
 import com.pocketgpg.data.Documents
 import com.pocketgpg.data.PickedFile
 import java.io.File
@@ -61,7 +62,6 @@ data class UiState(
     val compression: PgpCompression = PgpCompression.ZLIB,
     val armor: Boolean = false,
     val shredSource: Boolean = false,
-    val shredPasses: Int = 3,
     val destination: Uri? = null,
     val destinationLabel: String? = null,
     val bundleAsZip: Boolean = false,
@@ -101,8 +101,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var job: Job? = null
 
     init {
-        // Plaintext staged by a decrypt that died with the process must not outlive it.
+        // Ciphertext staged by a decrypt that died with the process must not outlive it, and
+        // neither should the Keystore key that was the only way to ever read it.
         viewModelScope.launch(Dispatchers.IO) {
+            runCatching { StagingCipher.destroyOrphans() }
             runCatching { stagingDir().listFiles()?.forEach(Shredder::wipeLocal) }
         }
     }
@@ -123,7 +125,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 .getOrDefault(PgpCompression.ZLIB),
             armor = prefs.getBoolean(KEY_ARMOR, false),
             shredSource = prefs.getBoolean(KEY_SHRED, false),
-            shredPasses = prefs.getInt(KEY_PASSES, 3),
             destination = destination,
             destinationLabel = destination?.let { Documents.folderLabel(getApplication(), it) },
         )
@@ -259,11 +260,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(shredSource = value) }
     }
 
-    fun setShredPasses(value: Int) {
-        prefs.edit().putInt(KEY_PASSES, value).apply()
-        _state.update { it.copy(shredPasses = value) }
-    }
-
     fun dismissMessage() = _state.update { it.copy(message = null) }
 
     fun cancel() {
@@ -333,6 +329,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
                 var created: Uri? = null
                 var staging: File? = null
+                var stagingCipher: StagingCipher? = null
                 try {
                     val onProgress: (Long) -> Unit = { processed ->
                         work.ensureActive()
@@ -380,10 +377,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         }
                         val stage = File(stagingDir(), "decrypt-${System.nanoTime()}")
                         staging = stage
+                        // The staging file itself only ever holds ciphertext under this one-time
+                        // key: even if flash wear levelling leaves an old physical copy of it
+                        // lying around forever, it is unreadable once the key below is destroyed.
+                        val cipher = StagingCipher.create()
+                        stagingCipher = cipher
                         val source = resolver.openInputStream(file.uri)
                             ?: throw IllegalStateException("could not read ${file.name}")
                         source.use { input ->
-                            stage.outputStream().use { target ->
+                            cipher.wrapForWriting(stage.outputStream()).use { target ->
                                 embeddedName =
                                     PgpCrypto.decrypt(input, target, passphrase, onProgress).embeddedFileName
                             }
@@ -394,6 +396,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             ?: throw IllegalStateException("could not create $outputName in the chosen folder")
                         created = output
                         val staged = stage.length()
+                        val reader = cipher.readingCipher()
                         stage.inputStream().use { input ->
                             val sink = resolver.openOutputStream(output, "wt")
                                 ?: throw IllegalStateException("could not write $outputName")
@@ -405,7 +408,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                                     work.ensureActive()
                                     val read = input.read(buffer)
                                     if (read < 0) break
-                                    target.write(buffer, 0, read)
+                                    reader.update(buffer, 0, read)?.let { if (it.isNotEmpty()) target.write(it) }
                                     copied += read
                                     // Same 1 MB step the crypto uses: a report per 64 KB would
                                     // recompose thousands of times on a large file.
@@ -417,6 +420,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                                         )
                                     }
                                 }
+                                reader.doFinal()?.let { if (it.isNotEmpty()) target.write(it) }
                             }
                         }
                     }
@@ -434,12 +438,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
                     val shredNote = if (snapshot.shredSource) {
                         report(index, snapshot.files.size, file.name, "Shredding", null)
-                        val outcome = Shredder.shred(context, file.uri, snapshot.shredPasses) { fraction ->
+                        val outcome = Shredder.shred(context, file.uri) { fraction ->
                             report(index, snapshot.files.size, file.name, "Shredding", fraction)
                         }
                         when (outcome) {
-                            is Shredder.Outcome.Shredded ->
-                                "Original shredded, ${snapshot.shredPasses} pass${plural(snapshot.shredPasses, "es")}"
+                            is Shredder.Outcome.Shredded -> "Original shredded"
                             is Shredder.Outcome.Failed -> "Original kept: ${outcome.reason}"
                         }
                     } else {
@@ -454,6 +457,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     created?.let { partial -> runCatching { DocumentsContract.deleteDocument(resolver, partial) } }
                     results += FileOutcome(file.name, error = e.message ?: e.javaClass.simpleName)
                 } finally {
+                    stagingCipher?.destroy()
                     staging?.let(Shredder::wipeLocal)
                 }
             }
@@ -556,7 +560,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         snapshot.files.forEachIndexed { index, file ->
             work.ensureActive()
             report(index, snapshot.files.size, file.name, "Shredding", null)
-            when (val outcome = Shredder.shred(context, file.uri, snapshot.shredPasses) { fraction ->
+            when (val outcome = Shredder.shred(context, file.uri) { fraction ->
                 report(index, snapshot.files.size, file.name, "Shredding", fraction)
             }) {
                 is Shredder.Outcome.Shredded -> shredded++
@@ -591,7 +595,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         const val KEY_COMPRESSION = "compression"
         const val KEY_ARMOR = "armor"
         const val KEY_SHRED = "shred"
-        const val KEY_PASSES = "passes"
         const val PASSPHRASE_ALPHABET = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
     }
 }

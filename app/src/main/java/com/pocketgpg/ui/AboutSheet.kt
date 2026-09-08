@@ -113,11 +113,15 @@ fun AboutSheet(onDismiss: () -> Unit) {
             )
 
             AboutParagraph(
-                "About shredding",
-                "Shredding overwrites the file's bytes before deleting it. On phone flash storage " +
-                    "the controller may quietly write those passes to fresh cells and leave the originals " +
-                    "readable until they are garbage collected, so treat it as making casual recovery hard " +
-                    "rather than as a guarantee against a forensic lab.",
+                "About secure delete",
+                "Secure delete overwrites a file's bytes before deleting it. On phone flash storage " +
+                    "the controller may quietly write that pass to a fresh cell and leave the original " +
+                    "readable until it is garbage collected, so treat it as making casual recovery hard " +
+                    "rather than as a guarantee against a forensic lab. Decryption sidesteps this for the " +
+                    "plaintext itself: it is staged under a one-time key that lives only in the device's " +
+                    "keystore and is destroyed the moment the file is safely saved or the operation " +
+                    "fails, so no readable copy of it is left behind regardless of what the flash " +
+                    "controller does with the bytes.",
             )
 
             AboutParagraph(
