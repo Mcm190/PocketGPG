@@ -53,11 +53,16 @@ data class FileOutcome(
     val succeeded: Boolean get() = error == null
 }
 
+/** Decrypted text on its way to the on-screen viewer; never written anywhere. */
+data class ViewedText(val sourceName: String, val text: String)
+
 data class UiState(
     val mode: Mode = Mode.Encrypt,
     val files: List<PickedFile> = emptyList(),
     val passphrase: String = "",
     val confirmation: String = "",
+    val extension: String = "",
+    val viewedText: ViewedText? = null,
     val cipher: PgpCipher = PgpCipher.AES_256,
     val compression: PgpCompression = PgpCompression.ZLIB,
     val armor: Boolean = false,
@@ -76,6 +81,18 @@ data class UiState(
 
     /** The zip question only makes sense when several files are on their way into one archive. */
     val canBundle: Boolean get() = mode == Mode.Encrypt && files.size > 1
+
+    /** What the user asked the decrypted file to end in, without any leading or trailing dots. */
+    val outputExtension: String get() = extension.trim('.')
+
+    /** Viewing needs no destination folder, but it shows one file at a time. */
+    val viewBlocker: String?
+        get() = when {
+            files.isEmpty() -> "Choose a file to view"
+            files.size > 1 -> "Viewing works on one file at a time"
+            passphrase.isEmpty() -> "Enter a passphrase"
+            else -> null
+        }
 
     val blocker: String?
         get() = when {
@@ -231,6 +248,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setConfirmation(value: String) = _state.update { it.copy(confirmation = value, message = null) }
 
+    /** Kept to characters that are safe in a file name; deliberately not remembered between launches. */
+    fun setExtension(value: String) = _state.update {
+        it.copy(extension = value.filter { c -> c.isLetterOrDigit() || c in "._-+" }.trimStart('.').take(16))
+    }
+
     fun generatePassphrase(): String {
         val random = SecureRandom()
         val generated = (0 until 6).joinToString("-") {
@@ -264,6 +286,71 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun cancel() {
         job?.cancel()
+    }
+
+    /**
+     * Decrypts the one queued file into memory and opens it in the viewer. Nothing is staged or
+     * saved, so no destination is needed and there is nothing to clean up afterwards.
+     */
+    fun view() {
+        val snapshot = _state.value
+        if (snapshot.running || snapshot.mode != Mode.Decrypt || snapshot.viewBlocker != null) return
+
+        val file = snapshot.files.single()
+        _state.update { it.copy(outcomes = emptyList(), message = null) }
+        job = viewModelScope.launch {
+            val outcome = try {
+                withContext(Dispatchers.IO) { decryptToText(snapshot, file) }
+            } catch (e: CancellationException) {
+                _state.update { it.copy(progress = null, message = "Cancelled.") }
+                throw e
+            }
+            _state.update {
+                outcome.fold(
+                    onSuccess = { text ->
+                        it.copy(progress = null, viewedText = ViewedText(file.name, text), passphrase = "")
+                    },
+                    onFailure = { e ->
+                        // The reason goes in the snackbar as well: the results card is far down the page.
+                        val reason = e.message ?: e.javaClass.simpleName
+                        it.copy(
+                            progress = null,
+                            outcomes = listOf(FileOutcome(file.name, error = reason)),
+                            message = reason,
+                        )
+                    },
+                )
+            }
+            job = null
+        }
+    }
+
+    fun closeViewer() = _state.update { it.copy(viewedText = null) }
+
+    private suspend fun decryptToText(snapshot: UiState, file: PickedFile): Result<String> {
+        val work = currentCoroutineContext()
+        val passphrase = snapshot.passphrase.toCharArray()
+        return try {
+            report(0, 1, file.name, "Decrypting", 0f)
+            val input = getApplication<Application>().contentResolver.openInputStream(file.uri)
+                ?: throw IllegalStateException("could not read ${file.name}")
+            val decrypted = input.use {
+                PgpCrypto.decryptText(it, passphrase) { processed ->
+                    work.ensureActive()
+                    report(
+                        0, 1, file.name, "Decrypting",
+                        if (file.size > 0) (processed.toFloat() / file.size).coerceIn(0f, 1f) else null,
+                    )
+                }
+            }
+            Result.success(decrypted.text)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Result.failure(e)
+        } finally {
+            passphrase.fill(' ')
+        }
     }
 
     fun start() {
@@ -323,7 +410,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 work.ensureActive()
                 val outputName =
                     if (encrypting) Documents.encryptedName(file.name, snapshot.armor)
-                    else Documents.decryptedName(file.name)
+                    else Documents.decryptedName(file.name, snapshot.outputExtension)
 
                 report(index, snapshot.files.size, file.name, verb, 0f)
 
@@ -426,7 +513,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
 
                     var finalUri = output
+                    // An extension the user typed outranks whatever name the sender embedded.
                     val finalName = embeddedName
+                        ?.takeIf { snapshot.outputExtension.isEmpty() }
                         ?.takeIf { it != outputName && it.isNotBlank() && !it.contains('/') }
                         ?.let { wanted ->
                             runCatching { DocumentsContract.renameDocument(resolver, output, wanted) }

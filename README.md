@@ -27,6 +27,11 @@ Click a screenshot to view it full size.
   many. The zip is streamed straight into the encrypted output, so the combined plaintext
   never touches storage. Decrypting gives you the `.zip` back to open yourself.
 - **Decrypt** anything produced by PocketGPG or by `gpg --symmetric`.
+- **Read a note without saving it.** *View text* in Decrypt mode decrypts straight into
+  memory and shows the text on screen, so no decrypted file is ever written. It handles up
+  to 256 KB of UTF-8 text, and the viewer window blocks screenshots and Recents previews.
+- **Name the decrypted file.** If the original had no extension and your phone cannot open
+  the result, type one (say `txt`) and it is added to the file name.
 - **Pick the cipher**: AES-256 (default), AES-192, AES-128, Camellia, Twofish, and the
   legacy Blowfish/3DES for compatibility. Compression is ZLIB, ZIP, BZip2 or none.
 - **Shred the originals** after a successful run, overwriting the contents before deleting

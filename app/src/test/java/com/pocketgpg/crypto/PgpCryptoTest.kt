@@ -101,6 +101,74 @@ class PgpCryptoTest {
     }
 
     @Test
+    fun `decryptText returns the text of what we encrypt`() {
+        val note = "Grüße, 世界 — line one\nline two\n"
+        val result = PgpCrypto.decryptText(ByteArrayInputStream(encrypt(note.toByteArray())), passphrase)
+        assertEquals(note, result.text)
+        assertEquals("secret.bin", result.embeddedFileName)
+    }
+
+    @Test
+    fun `decryptText reads what gnupg produces`() {
+        assumeTrue(gpgAvailable())
+        val note = "from gpg: café ☕\n"
+        val source = temp.newFile("note.txt").apply { writeText(note) }
+        val encrypted = File(temp.root, "note.txt.gpg")
+        val made = gpg("--symmetric", "--output", encrypted.path, source.path)
+        assertEquals(made.second, 0, made.first)
+
+        val result = PgpCrypto.decryptText(encrypted.inputStream(), passphrase)
+        assertEquals(note, result.text)
+        assertEquals("note.txt", result.embeddedFileName)
+    }
+
+    @Test
+    fun `decryptText strips a byte order mark and accepts an empty file`() {
+        val withBom = byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()) + "hi".toByteArray()
+        assertEquals("hi", PgpCrypto.decryptText(ByteArrayInputStream(encrypt(withBom)), passphrase).text)
+        assertEquals("", PgpCrypto.decryptText(ByteArrayInputStream(encrypt(ByteArray(0))), passphrase).text)
+    }
+
+    @Test
+    fun `decryptText refuses binary data`() {
+        for (binary in listOf(plaintext(5_000), "text\u0000with a NUL".toByteArray())) {
+            val error = runCatching {
+                PgpCrypto.decryptText(ByteArrayInputStream(encrypt(binary)), passphrase)
+            }.exceptionOrNull()
+            assertTrue("was $error", error is PgpCrypto.PgpError.NotText)
+        }
+    }
+
+    @Test
+    fun `decryptText stops at the size limit even when compression hides it`() {
+        // A megabyte of zeros deflates to about a kilobyte, which is the decompression-bomb shape.
+        val bomb = encrypt(ByteArray(1 shl 20))
+        assertTrue("fixture should be tiny, was ${bomb.size}", bomb.size < 10_000)
+        val error = runCatching {
+            PgpCrypto.decryptText(ByteArrayInputStream(bomb), passphrase, maxBytes = 4_096)
+        }.exceptionOrNull()
+        assertTrue("was $error", error is PgpCrypto.PgpError.TooLargeToView)
+    }
+
+    @Test
+    fun `decryptText reports a wrong passphrase and releases no text`() {
+        val error = runCatching {
+            PgpCrypto.decryptText(ByteArrayInputStream(encrypt("secret".toByteArray())), "wrong".toCharArray())
+        }.exceptionOrNull()
+        assertTrue("was $error", error is PgpCrypto.PgpError.WrongPassphrase)
+    }
+
+    @Test
+    fun `decryptText refuses a tampered message instead of showing it`() {
+        val encrypted = encrypt("a perfectly ordinary note".toByteArray(), compression = PgpCompression.NONE)
+        encrypted[encrypted.size - 5] = (encrypted[encrypted.size - 5].toInt() xor 0x01).toByte()
+        val error = runCatching {
+            PgpCrypto.decryptText(ByteArrayInputStream(encrypted), passphrase)
+        }.exceptionOrNull()
+        assertTrue("was $error", error is PgpCrypto.PgpError)
+    }
+
+    @Test
     fun `non-pgp input is rejected`() {
         val error = runCatching {
             PgpCrypto.decrypt(ByteArrayInputStream("hello world".toByteArray()), ByteArrayOutputStream(), passphrase)

@@ -1,7 +1,11 @@
 package com.pocketgpg.crypto
 
+import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.io.OutputStream
+import java.nio.ByteBuffer
+import java.nio.charset.CharacterCodingException
+import java.nio.charset.CodingErrorAction
 import java.security.SecureRandom
 import java.util.Date
 import org.bouncycastle.bcpg.ArmoredOutputStream
@@ -49,6 +53,12 @@ object PgpCrypto {
 
         class NoIntegrityProtection :
             PgpError("This file carries no integrity protection, so its contents cannot be trusted. GnuPG refuses these too.")
+
+        class TooLargeToView(limit: Int) :
+            PgpError("This file is larger than ${limit / 1024} KB, too big to read here. Use Decrypt to save it instead.")
+
+        class NotText :
+            PgpError("This file is not plain text, so it cannot be shown here. Use Decrypt to save it instead.")
     }
 
     data class DecryptResult(
@@ -57,6 +67,15 @@ object PgpCrypto {
         val bytesWritten: Long,
         val integrityProtected: Boolean,
     )
+
+    data class DecryptedText(val text: String, val embeddedFileName: String?)
+
+    /**
+     * The most plaintext the in-app viewer will take. Bounded by layout, not memory: on an
+     * emulator a 1 MB file took about four seconds on the main thread to lay out, which is
+     * uncomfortably close to Android's five-second not-responding limit on a slower phone.
+     */
+    const val MAX_TEXT_BYTES = 256 * 1024
 
     /**
      * Writes an OpenPGP message readable by `gpg -d`.
@@ -192,6 +211,59 @@ object PgpCrypto {
             bytesWritten = written,
             integrityProtected = true,
         )
+    }
+
+    /**
+     * Decrypts straight into memory and returns the contents as UTF-8 text, so nothing is ever
+     * written to storage. The text is only returned once [decrypt] has authenticated the whole
+     * message, so a tampered file shows nothing. Fails with [PgpError.TooLargeToView] past
+     * [maxBytes] (which also bounds a decompression bomb) and [PgpError.NotText] for anything
+     * that is not valid UTF-8 or contains NUL bytes.
+     */
+    fun decryptText(
+        source: InputStream,
+        passphrase: CharArray,
+        maxBytes: Int = MAX_TEXT_BYTES,
+        onProgress: (Long) -> Unit = {},
+    ): DecryptedText {
+        val buffer = BoundedBuffer(maxBytes)
+        try {
+            val result = decrypt(source, buffer, passphrase, onProgress)
+            return DecryptedText(buffer.toText(), result.embeddedFileName)
+        } finally {
+            buffer.wipe()
+        }
+    }
+
+    private class BoundedBuffer(private val limit: Int) : ByteArrayOutputStream(minOf(limit, BUFFER_SIZE)) {
+
+        override fun write(b: Int) {
+            if (count + 1 > limit) throw PgpError.TooLargeToView(limit)
+            super.write(b)
+        }
+
+        override fun write(b: ByteArray, off: Int, len: Int) {
+            if (count + len > limit) throw PgpError.TooLargeToView(limit)
+            super.write(b, off, len)
+        }
+
+        fun toText(): String {
+            val decoder = Charsets.UTF_8.newDecoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT)
+            val text = try {
+                decoder.decode(ByteBuffer.wrap(buf, 0, count)).toString()
+            } catch (_: CharacterCodingException) {
+                throw PgpError.NotText()
+            }
+            if (text.indexOf('\u0000') >= 0) throw PgpError.NotText()
+            return text.removePrefix("﻿")
+        }
+
+        fun wipe() {
+            buf.fill(0)
+            count = 0
+        }
     }
 
     enum class Recognition {

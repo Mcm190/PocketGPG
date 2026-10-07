@@ -24,12 +24,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderZip
@@ -76,6 +78,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -113,6 +116,8 @@ fun PocketGpgScreen(viewModel: MainViewModel) {
     }
 
     if (showAbout) AboutSheet(onDismiss = { showAbout = false })
+
+    state.viewedText?.let { TextViewerDialog(it, onDismiss = viewModel::closeViewer) }
 
     if (state.bundlePromptVisible) {
         AlertDialog(
@@ -173,6 +178,37 @@ fun PocketGpgScreen(viewModel: MainViewModel) {
             FilesCard(viewModel, onAdd = { pickFiles.launch(arrayOf("*/*")) })
 
             PassphraseCard(viewModel)
+
+            if (state.mode == Mode.Decrypt) {
+                SectionCard("Decrypted file", Icons.Default.Edit) {
+                    val single = state.files.singleOrNull()
+                    OutlinedTextField(
+                        value = state.extension,
+                        onValueChange = viewModel::setExtension,
+                        label = { Text("File extension (optional)") },
+                        prefix = { Text(".") },
+                        placeholder = { Text("txt") },
+                        supportingText = {
+                            Text(
+                                if (single != null && state.outputExtension.isNotEmpty()) {
+                                    "Saved as ${Documents.decryptedName(single.name, state.outputExtension)}"
+                                } else {
+                                    "Added to the end of the file name so your phone knows how to open it. " +
+                                        "Leave empty to keep the original name."
+                                },
+                            )
+                        },
+                        singleLine = true,
+                        enabled = !state.running,
+                        keyboardOptions = KeyboardOptions(
+                            capitalization = KeyboardCapitalization.None,
+                            autoCorrectEnabled = false,
+                            keyboardType = KeyboardType.Ascii,
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
 
             if (state.mode == Mode.Encrypt) {
                 SectionCard("Encryption", Icons.Default.Tune) {
@@ -563,30 +599,55 @@ private fun ActionBar(viewModel: MainViewModel) {
                     Text("Cancel")
                 }
             } else {
-                state.blocker?.let {
+                val decrypting = state.mode == Mode.Decrypt
+                // Decrypting and viewing are blocked by different things. Viewing needs no folder,
+                // so when the folder is all that is missing the hint must not read as though it
+                // blocked View too; and when Decrypt is ready but View is not, say why.
+                val hint = when {
+                    !decrypting -> state.blocker
+                    state.blocker == null -> state.viewBlocker
+                    state.viewBlocker == null -> "Choose where results are saved to decrypt to a file"
+                    else -> state.blocker
+                }
+                hint?.let {
                     Text(
                         it,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                Button(
-                    onClick = viewModel::start,
-                    enabled = state.blocker == null,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                ) {
-                    Icon(
-                        if (state.mode == Mode.Encrypt) Icons.Default.Lock else Icons.Default.LockOpen,
-                        contentDescription = null,
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        if (state.mode == Mode.Encrypt) "Encrypt" else "Decrypt",
-                        style = MaterialTheme.typography.titleMedium,
-                    )
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                    if (decrypting) {
+                        OutlinedButton(
+                            onClick = viewModel::view,
+                            enabled = state.viewBlocker == null,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(52.dp),
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.Article, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("View text", style = MaterialTheme.typography.titleMedium)
+                        }
+                    }
+                    Button(
+                        onClick = viewModel::start,
+                        enabled = state.blocker == null,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(52.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                    ) {
+                        Icon(
+                            if (state.mode == Mode.Encrypt) Icons.Default.Lock else Icons.Default.LockOpen,
+                            contentDescription = null,
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            if (state.mode == Mode.Encrypt) "Encrypt" else "Decrypt",
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                    }
                 }
             }
         }

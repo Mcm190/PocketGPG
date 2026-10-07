@@ -83,10 +83,20 @@ object Documents {
     fun encryptedName(source: String, armored: Boolean): String =
         source + if (armored) ".asc" else ".gpg"
 
-    fun decryptedName(source: String): String {
+    /**
+     * Strips the encryption suffix, then appends [extension] unless the name already ends in it.
+     * Appending rather than replacing means a name like `data.2024.gpg` never loses a part of
+     * itself to the extension that was asked for.
+     */
+    fun decryptedName(source: String, extension: String = ""): String {
         val stripped = ENCRYPTED_SUFFIXES.firstOrNull { source.endsWith(it, ignoreCase = true) }
             ?.let { source.dropLast(it.length) }
-        return stripped?.takeIf { it.isNotBlank() } ?: "$source.decrypted"
+            ?.takeIf { it.isNotBlank() }
+        val ext = extension.trim('.')
+        if (ext.isEmpty()) return stripped ?: "$source.decrypted"
+
+        val stem = stripped ?: source
+        return if (stem.endsWith(".$ext", ignoreCase = true)) stem else "$stem.$ext"
     }
 
     fun looksEncrypted(name: String): Boolean =
